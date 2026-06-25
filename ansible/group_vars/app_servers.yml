@@ -1,0 +1,6 @@
+app_name: devops-fastapi
+app_directory: /opt/devops-fastapi
+app_port: 8000
+postgres_db: appdb
+postgres_user: appuser
+postgres_password: change-me-in-production
