@@ -1,73 +1,79 @@
-# Cloud Deployment Automation with Terraform and Ansible
+# Cloud Deployment Automation
 
-A complete DevOps portfolio project that provisions cloud infrastructure with Terraform, configures a Linux server with Ansible, and deploys a containerized FastAPI application backed by PostgreSQL.
+This repo is a small DevOps deployment project. It provisions an AWS VM with Terraform, configures the server with Ansible, and runs a FastAPI app with PostgreSQL using Docker Compose.
 
-## Project Description
+## What It Includes
 
-This project demonstrates an end-to-end cloud deployment workflow:
+- Terraform code for an AWS VPC, public subnet, security group, and EC2 instance
+- Ansible playbook to install Docker and deploy the app
+- FastAPI backend with a simple PostgreSQL-backed messages API
+- Docker Compose setup for the API and database
+- GitHub Actions workflow for tests, Docker build, and Terraform validation
 
-- Terraform creates AWS infrastructure: VPC, public subnet, internet gateway, route table, security group, and EC2 virtual machine.
-- Ansible configures the Linux server, installs Docker, copies the application, renders environment configuration, starts Docker Compose, and validates the health endpoint.
-- Docker Compose runs a FastAPI backend and PostgreSQL database.
-- GitHub Actions validates the application, Docker build, and Terraform configuration.
-
-The result is a practical infrastructure-as-code project suitable for a DevOps portfolio, resume, or interview demo.
-
-## Architecture
-
-```mermaid
-flowchart LR
-    Dev[Developer Workstation] --> TF[Terraform]
-    TF --> AWS[AWS VPC + EC2]
-    Dev --> Ansible[Ansible Playbook]
-    Ansible --> VM[Ubuntu VM]
-    VM --> Docker[Docker Compose]
-    Docker --> API[FastAPI API]
-    Docker --> DB[(PostgreSQL)]
-    API --> DB
-    GitHub[GitHub Actions] --> Tests[Tests + Docker Build + Terraform Validate]
-```
-
-## Repository Structure
+## Project Layout
 
 ```text
 .
-├── .github/workflows/ci.yml
-├── ansible/
-│   ├── ansible.cfg
-│   ├── group_vars/app_servers.yml
-│   ├── inventory.ini.example
-│   ├── playbook.yml
-│   └── templates/app.env.j2
-├── app/
-│   ├── Dockerfile
-│   ├── docker-compose.yml
-│   ├── main.py
-│   ├── requirements.txt
-│   └── tests/test_main.py
-├── terraform/
-│   ├── main.tf
-│   ├── outputs.tf
-│   ├── terraform.tfvars.example
-│   └── variables.tf
-├── .gitignore
-├── LICENSE
-└── README.md
+|-- .github/workflows/ci.yml
+|-- ansible/
+|   |-- ansible.cfg
+|   |-- group_vars/app_servers.yml
+|   |-- inventory.ini.example
+|   |-- playbook.yml
+|   `-- templates/app.env.j2
+|-- app/
+|   |-- Dockerfile
+|   |-- docker-compose.yml
+|   |-- main.py
+|   |-- requirements.txt
+|   `-- tests/test_main.py
+|-- terraform/
+|   |-- main.tf
+|   |-- outputs.tf
+|   |-- terraform.tfvars.example
+|   `-- variables.tf
+`-- README.md
 ```
 
-## Prerequisites
+## Running Locally
 
-- AWS account
-- AWS CLI configured with credentials
-- Terraform 1.6+
-- Ansible 2.14+
-- Existing AWS EC2 key pair
-- SSH private key available locally
-- Docker, only for local app testing
+The safest way to try the application is to run only the Docker Compose stack locally. This does not create any AWS resources.
 
-## 1. Configure Terraform
+```bash
+cd app
+cp .env.example .env
+docker compose up --build
+```
 
-Copy the example variables file:
+Open the API docs:
+
+```text
+http://localhost:8000/docs
+```
+
+Health check:
+
+```text
+http://localhost:8000/health
+```
+
+Stop the containers:
+
+```bash
+docker compose down
+```
+
+Remove the local database volume as well:
+
+```bash
+docker compose down -v
+```
+
+## Deploying to AWS
+
+Only run this section if you want to create cloud resources. AWS may charge for EC2, storage, public IPv4, or network usage depending on your account.
+
+### 1. Prepare Terraform Variables
 
 ```bash
 cd terraform
@@ -85,9 +91,9 @@ allowed_ssh_cidr = "YOUR_PUBLIC_IP/32"
 allowed_app_cidr = "0.0.0.0/0"
 ```
 
-Use your current public IP for `allowed_ssh_cidr` so SSH is not open to the whole internet.
+Use your own public IP for `allowed_ssh_cidr`. Avoid opening SSH to `0.0.0.0/0`.
 
-## 2. Provision Infrastructure
+### 2. Create the Infrastructure
 
 ```bash
 terraform init
@@ -97,57 +103,49 @@ terraform plan
 terraform apply
 ```
 
-After apply completes, note these outputs:
+After the apply finishes, copy the EC2 public IP from the Terraform output.
 
-- `instance_public_ip`
-- `application_url`
-- `ansible_inventory_line`
-
-## 3. Configure Ansible Inventory
-
-Create an inventory file from the example:
+### 3. Configure Ansible
 
 ```bash
 cd ../ansible
 cp inventory.ini.example inventory.ini
 ```
 
-Replace the placeholder values:
+Update `inventory.ini`:
 
 ```ini
 [app_servers]
 app ansible_host=EC2_PUBLIC_IP ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/your-key.pem
 ```
 
-Make sure your private key has safe permissions:
+On Linux or macOS, make sure the key has restricted permissions:
 
 ```bash
 chmod 400 ~/.ssh/your-key.pem
 ```
 
-## 4. Deploy the Application
-
-From the `ansible` directory:
+### 4. Deploy the App
 
 ```bash
 ansible-playbook playbook.yml
 ```
 
-When the playbook finishes, open:
+When the playbook finishes, the app should be available at:
 
 ```text
 http://EC2_PUBLIC_IP:8000
 ```
 
-Useful endpoints:
+## API Endpoints
 
-- `GET /`
-- `GET /health`
-- `GET /docs`
-- `POST /messages`
-- `GET /messages`
+- `GET /` - basic service information
+- `GET /health` - health check used by Ansible
+- `GET /docs` - Swagger UI
+- `POST /messages` - create a message
+- `GET /messages` - list messages
 
-Example API call:
+Example:
 
 ```bash
 curl -X POST http://EC2_PUBLIC_IP:8000/messages \
@@ -155,56 +153,21 @@ curl -X POST http://EC2_PUBLIC_IP:8000/messages \
   -d '{"text":"deployed with Terraform and Ansible"}'
 ```
 
-## Local Development
+## CI
 
-Run the app locally with Docker Compose:
-
-```bash
-cd app
-cp .env.example .env
-```
-
-Start the stack:
-
-```bash
-docker compose up --build
-```
-
-Open:
-
-```text
-http://localhost:8000/docs
-```
-
-## CI Pipeline
-
-GitHub Actions runs:
+GitHub Actions runs three checks:
 
 - FastAPI tests
 - Docker image build
-- Terraform format check
-- Terraform validation
+- Terraform formatting and validation
 
-Workflow file:
-
-```text
-.github/workflows/ci.yml
-```
+The workflow is defined in `.github/workflows/ci.yml`.
 
 ## Cleanup
 
-Destroy AWS resources when you are done:
+Destroy the AWS infrastructure when you are done:
 
 ```bash
 cd terraform
 terraform destroy
 ```
-
-## Resume Description
-
-Cloud Deployment Automation using Terraform and Ansible
-
-- Built a DevOps portfolio project demonstrating infrastructure-as-code, Linux server configuration, and containerized application deployment.
-- Used Terraform to define AWS infrastructure components including VPC, subnet, security rules, EC2 VM, SSH access, and deployment outputs.
-- Developed Ansible playbooks to automate Docker installation, application setup, environment configuration, Docker Compose deployment, and health-check validation.
-- Containerized a FastAPI backend with PostgreSQL using Docker Compose and added GitHub Actions for automated testing, Docker builds, and Terraform validation.
